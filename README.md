@@ -1,5 +1,13 @@
 # traefik-mcpbouncer
 
+[![CI](https://github.com/Sipioteo/traefik-mcpbouncer/actions/workflows/ci.yml/badge.svg)](https://github.com/Sipioteo/traefik-mcpbouncer/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/Sipioteo/traefik-mcpbouncer/actions/workflows/codeql.yml/badge.svg)](https://github.com/Sipioteo/traefik-mcpbouncer/actions/workflows/codeql.yml)
+[![govulncheck](https://github.com/Sipioteo/traefik-mcpbouncer/actions/workflows/govulncheck.yml/badge.svg)](https://github.com/Sipioteo/traefik-mcpbouncer/actions/workflows/govulncheck.yml)
+[![Go Report Card](https://goreportcard.com/badge/github.com/Sipioteo/traefik-mcpbouncer)](https://goreportcard.com/report/github.com/Sipioteo/traefik-mcpbouncer)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Latest tag](https://img.shields.io/github/v/tag/Sipioteo/traefik-mcpbouncer?sort=semver)](https://github.com/Sipioteo/traefik-mcpbouncer/releases)
+[![Traefik plugin](https://img.shields.io/badge/Traefik-plugin-1F2D5C.svg?logo=traefikproxy&logoColor=white)](https://plugins.traefik.io)
+
 Traefik middleware plugin that adds OAuth 2.1 / OIDC authentication to MCP (Model Context Protocol) servers.
 
 The plugin enforces the MCP Authorization spec (rev. 2025-06-18) in front of any MCP server image — including ones with no native auth — by:
