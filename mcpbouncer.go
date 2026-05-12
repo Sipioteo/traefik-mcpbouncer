@@ -141,13 +141,8 @@ func (m *MCPBouncer) proxyToSidecar(w http.ResponseWriter, r *http.Request) {
 }
 
 func (m *MCPBouncer) validateAndForward(w http.ResponseWriter, r *http.Request) {
-	authHeader := r.Header.Get("Authorization")
-	if !strings.HasPrefix(authHeader, "Bearer ") {
-		m.unauthorized(w, r)
-		return
-	}
-	token := strings.TrimPrefix(authHeader, "Bearer ")
-	if token == "" {
+	token, ok := extractBearer(r)
+	if !ok {
 		m.unauthorized(w, r)
 		return
 	}
@@ -164,50 +159,9 @@ func (m *MCPBouncer) validateAndForward(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// Validate standard claims.
-	publicBase := m.publicBase(r)
-	now := time.Now().Unix()
-	const skew = int64(60)
-
-	iss, _ := claims["iss"].(string)
-	if iss != publicBase {
+	if !m.validateClaims(claims, m.publicBase(r)) {
 		m.unauthorized(w, r)
 		return
-	}
-
-	// aud can be string or []interface{}.
-	if !audContains(claims["aud"], m.cfg.Audience) {
-		m.unauthorized(w, r)
-		return
-	}
-
-	exp, ok := claimInt64(claims["exp"])
-	if !ok || exp+skew < now {
-		m.unauthorized(w, r)
-		return
-	}
-
-	if nbfRaw, hasNbf := claims["nbf"]; hasNbf {
-		nbf, ok := claimInt64(nbfRaw)
-		if ok && nbf-skew > now {
-			m.unauthorized(w, r)
-			return
-		}
-	}
-
-	// Optional scope enforcement.
-	if m.cfg.RequiredScopes != "" {
-		scopeClaim, _ := claims["scope"].(string)
-		granted := make(map[string]bool)
-		for _, s := range strings.Fields(scopeClaim) {
-			granted[s] = true
-		}
-		for _, req := range strings.Fields(m.cfg.RequiredScopes) {
-			if !granted[req] {
-				m.unauthorized(w, r)
-				return
-			}
-		}
 	}
 
 	sub, _ := claims["sub"].(string)
@@ -216,6 +170,55 @@ func (m *MCPBouncer) validateAndForward(w http.ResponseWriter, r *http.Request) 
 	r.Header.Set("X-Mcp-Scopes", scope)
 
 	m.next.ServeHTTP(w, r)
+}
+
+func extractBearer(r *http.Request) (string, bool) {
+	authHeader := r.Header.Get("Authorization")
+	if !strings.HasPrefix(authHeader, "Bearer ") {
+		return "", false
+	}
+	token := strings.TrimPrefix(authHeader, "Bearer ")
+	return token, token != ""
+}
+
+// validateClaims checks iss / aud / exp / nbf and optional required scopes.
+func (m *MCPBouncer) validateClaims(claims map[string]interface{}, publicBase string) bool {
+	now := time.Now().Unix()
+	const skew = int64(60)
+
+	if iss, _ := claims["iss"].(string); iss != publicBase {
+		return false
+	}
+	if !audContains(claims["aud"], m.cfg.Audience) {
+		return false
+	}
+	exp, ok := claimInt64(claims["exp"])
+	if !ok || exp+skew < now {
+		return false
+	}
+	if nbfRaw, hasNbf := claims["nbf"]; hasNbf {
+		if nbf, ok := claimInt64(nbfRaw); ok && nbf-skew > now {
+			return false
+		}
+	}
+	return m.hasRequiredScopes(claims)
+}
+
+func (m *MCPBouncer) hasRequiredScopes(claims map[string]interface{}) bool {
+	if m.cfg.RequiredScopes == "" {
+		return true
+	}
+	scopeClaim, _ := claims["scope"].(string)
+	granted := make(map[string]bool)
+	for _, s := range strings.Fields(scopeClaim) {
+		granted[s] = true
+	}
+	for _, req := range strings.Fields(m.cfg.RequiredScopes) {
+		if !granted[req] {
+			return false
+		}
+	}
+	return true
 }
 
 func (m *MCPBouncer) unauthorized(w http.ResponseWriter, r *http.Request) {
