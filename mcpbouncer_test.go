@@ -38,10 +38,10 @@ func makeEdDSAJWT(t *testing.T, priv ed25519.PrivateKey, pub ed25519.PublicKey, 
 
 func TestMatchOAuthSuffix(t *testing.T) {
 	cases := []struct {
-		path      string
-		wantOK    bool
-		wantSfx   string
-		wantPfx   string
+		path    string
+		wantOK  bool
+		wantSfx string
+		wantPfx string
 	}{
 		{"/wiki/.well-known/oauth-protected-resource", true, "/.well-known/oauth-protected-resource", "/wiki"},
 		{"/wiki/oauth/token", true, "/oauth/token", "/wiki"},

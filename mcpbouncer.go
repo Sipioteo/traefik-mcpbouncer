@@ -33,10 +33,10 @@ func CreateConfig() *Config {
 
 // MCPBouncer is the Traefik middleware handler.
 type MCPBouncer struct {
-	next      http.Handler
-	cfg       *Config
-	cache     *jwksCache
-	sidecarU  *url.URL
+	next     http.Handler
+	cfg      *Config
+	cache    *jwksCache
+	sidecarU *url.URL
 }
 
 // New constructs the middleware. Called once by Traefik/Yaegi per middleware instance.
