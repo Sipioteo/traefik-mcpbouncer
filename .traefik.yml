@@ -1,6 +1,6 @@
 displayName: MCPBouncer
 type: middleware
-import: github.com/sipiote/mcpbouncer
+import: github.com/Sipioteo/traefik-mcpbouncer
 summary: 'OAuth 2.1 / OIDC bouncer for MCP servers (per the MCP Authorization spec)'
 testData:
   providerIssuer: https://accounts.google.com

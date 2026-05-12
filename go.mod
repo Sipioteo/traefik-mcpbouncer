@@ -1,3 +1,3 @@
-module github.com/sipiote/mcpbouncer
+module github.com/Sipioteo/traefik-mcpbouncer
 
 go 1.23
