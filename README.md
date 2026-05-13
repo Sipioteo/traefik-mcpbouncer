@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/banner.png" alt="MCPBouncer Traefik plugin — OAuth 2.1 middleware for MCP servers" width="100%">
+</p>
+
 # traefik-mcpbouncer
 
 [![CI](https://github.com/Sipioteo/traefik-mcpbouncer/actions/workflows/ci.yml/badge.svg)](https://github.com/Sipioteo/traefik-mcpbouncer/actions/workflows/ci.yml)
