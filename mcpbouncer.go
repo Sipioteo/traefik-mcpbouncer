@@ -223,9 +223,10 @@ func (m *MCPBouncer) checkClaims(claims map[string]interface{}, publicBase strin
 		return fmt.Sprintf("iss_mismatch got=%q want=%q", iss, publicBase)
 	}
 	// aud MUST be the resource URI (= publicBase), per RFC 8707 + MCP auth spec.
-	// The 'audience' config label is accepted for back-compat but ignored:
-	// the spec leaves no room for a custom audience string.
-	if !audContains(claims["aud"], publicBase) {
+	// Accept both slash-suffixed and slash-less forms — different clients
+	// normalize URIs differently (Claude.ai sends "https://X/", spec leaves
+	// trailing-slash semantics underspecified).
+	if !audContains(claims["aud"], publicBase) && !audContains(claims["aud"], publicBase+"/") {
 		return fmt.Sprintf("aud_mismatch claim=%v want=%q", claims["aud"], publicBase)
 	}
 	exp, ok := claimInt64(claims["exp"])
