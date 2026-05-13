@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/banner.png" alt="MCPBouncer Traefik plugin — OAuth 2.1 middleware for MCP servers" width="100%">
+  <img src="https://raw.githubusercontent.com/Sipioteo/traefik-mcpbouncer/main/assets/banner.png" alt="MCPBouncer Traefik plugin — OAuth 2.1 middleware for MCP servers" width="100%">
 </p>
 
 # traefik-mcpbouncer
