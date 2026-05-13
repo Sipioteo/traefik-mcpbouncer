@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 )
@@ -174,7 +175,7 @@ func (m *MCPBouncer) proxyToSidecar(w http.ResponseWriter, r *http.Request) {
 func (m *MCPBouncer) validateAndForward(w http.ResponseWriter, r *http.Request) {
 	token, ok := extractBearer(r)
 	if !ok {
-		m.unauthorized(w, r)
+		m.unauthorized(w, r, "missing_bearer")
 		return
 	}
 
@@ -186,12 +187,12 @@ func (m *MCPBouncer) validateAndForward(w http.ResponseWriter, r *http.Request) 
 		return pk.key, nil
 	})
 	if err != nil {
-		m.unauthorized(w, r)
+		m.unauthorized(w, r, fmt.Sprintf("jwt_parse: %v", err))
 		return
 	}
 
-	if !m.validateClaims(claims, m.publicBase(r)) {
-		m.unauthorized(w, r)
+	if reason := m.checkClaims(claims, m.publicBase(r)); reason != "" {
+		m.unauthorized(w, r, reason)
 		return
 	}
 
@@ -212,32 +213,36 @@ func extractBearer(r *http.Request) (string, bool) {
 	return token, token != ""
 }
 
-// validateClaims checks iss / aud / exp / nbf and optional required scopes.
-func (m *MCPBouncer) validateClaims(claims map[string]interface{}, publicBase string) bool {
+// checkClaims returns "" if claims are valid, else a short reason for logging.
+func (m *MCPBouncer) checkClaims(claims map[string]interface{}, publicBase string) string {
 	now := time.Now().Unix()
 	const skew = int64(60)
 
-	if iss, _ := claims["iss"].(string); iss != publicBase {
-		return false
+	iss, _ := claims["iss"].(string)
+	if iss != publicBase {
+		return fmt.Sprintf("iss_mismatch got=%q want=%q", iss, publicBase)
 	}
 	if !audContains(claims["aud"], m.cfg.Audience) {
-		return false
+		return fmt.Sprintf("aud_mismatch claim=%v want=%q", claims["aud"], m.cfg.Audience)
 	}
 	exp, ok := claimInt64(claims["exp"])
-	if !ok || exp+skew < now {
-		return false
+	if !ok {
+		return "exp_missing"
+	}
+	if exp+skew < now {
+		return fmt.Sprintf("exp_expired exp=%d now=%d", exp, now)
 	}
 	if nbfRaw, hasNbf := claims["nbf"]; hasNbf {
 		if nbf, ok := claimInt64(nbfRaw); ok && nbf-skew > now {
-			return false
+			return fmt.Sprintf("nbf_future nbf=%d now=%d", nbf, now)
 		}
 	}
-	return m.hasRequiredScopes(claims)
+	return m.checkRequiredScopes(claims)
 }
 
-func (m *MCPBouncer) hasRequiredScopes(claims map[string]interface{}) bool {
+func (m *MCPBouncer) checkRequiredScopes(claims map[string]interface{}) string {
 	if m.cfg.RequiredScopes == "" {
-		return true
+		return ""
 	}
 	scopeClaim, _ := claims["scope"].(string)
 	granted := make(map[string]bool)
@@ -246,14 +251,15 @@ func (m *MCPBouncer) hasRequiredScopes(claims map[string]interface{}) bool {
 	}
 	for _, req := range strings.Fields(m.cfg.RequiredScopes) {
 		if !granted[req] {
-			return false
+			return fmt.Sprintf("missing_scope %q (have=%q)", req, scopeClaim)
 		}
 	}
-	return true
+	return ""
 }
 
-func (m *MCPBouncer) unauthorized(w http.ResponseWriter, r *http.Request) {
+func (m *MCPBouncer) unauthorized(w http.ResponseWriter, r *http.Request, reason string) {
 	base := m.publicBase(r)
+	fmt.Fprintf(os.Stderr, "[mcpbouncer] 401 path=%s reason=%s resource=%s\n", r.URL.Path, reason, m.cfg.Resource)
 	w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Bearer resource_metadata="%s/.well-known/oauth-protected-resource"`, base))
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusUnauthorized)
