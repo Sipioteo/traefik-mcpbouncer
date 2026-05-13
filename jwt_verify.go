@@ -1,4 +1,4 @@
-package mcpbouncer
+package traefik_mcpbouncer
 
 import (
 	"crypto"
