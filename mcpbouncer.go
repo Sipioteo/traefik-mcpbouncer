@@ -22,12 +22,22 @@ type Config struct {
 	Audience            string
 	JWKSCacheTTLSeconds int
 	RequiredScopes      string
+	// PathPrefix is the base path under the host used to build publicBase
+	// (the JWT iss claim and the URLs in OAuth metadata documents).
+	//
+	//   ""   — host-only: publicBase = https://<host>           (one MCP per host)
+	//   "/x" — subpath:   publicBase = https://<host>/x         (multi-MCP per host)
+	//   "*"  — auto:      derive from request path (legacy / default)
+	//
+	// Set this explicitly for stable resource identity across all request paths.
+	PathPrefix string
 }
 
 // CreateConfig returns a Config with sensible defaults.
 func CreateConfig() *Config {
 	return &Config{
 		JWKSCacheTTLSeconds: 300,
+		PathPrefix:          "*",
 	}
 }
 
@@ -97,18 +107,21 @@ func (m *MCPBouncer) publicBase(r *http.Request) string {
 	if host == "" {
 		host = r.Host
 	}
-	// Derive the path prefix by stripping any oauth suffix.
+	// Explicit prefix wins — same publicBase for every request to this resource.
+	if m.cfg.PathPrefix != "*" {
+		return scheme + "://" + host + strings.TrimRight(m.cfg.PathPrefix, "/")
+	}
+	// Legacy auto-derive: strip OAuth suffix if present, else use full request path.
 	_, prefix, ok := MatchOAuthSuffix(r.URL.Path)
 	if !ok {
 		prefix = r.URL.Path
 	}
-	// Trim trailing slash from prefix to produce a clean base URL.
-	prefix = strings.TrimRight(prefix, "/")
-	return scheme + "://" + host + prefix
+	return scheme + "://" + host + strings.TrimRight(prefix, "/")
 }
 
 func (m *MCPBouncer) proxyToSidecar(w http.ResponseWriter, r *http.Request) {
-	suffix, prefix, _ := MatchOAuthSuffix(r.URL.Path)
+	suffix, _, _ := MatchOAuthSuffix(r.URL.Path)
+	publicBase := m.publicBase(r)
 	sidecarU := m.sidecarU
 
 	proxy := &httputil.ReverseProxy{
@@ -117,16 +130,6 @@ func (m *MCPBouncer) proxyToSidecar(w http.ResponseWriter, r *http.Request) {
 			req.URL.Host = sidecarU.Host
 			// Rewrite path to only the OAuth suffix.
 			req.URL.Path = suffix
-
-			scheme := r.Header.Get("X-Forwarded-Proto")
-			if scheme == "" {
-				scheme = "https"
-			}
-			host := r.Header.Get("X-Forwarded-Host")
-			if host == "" {
-				host = r.Host
-			}
-			publicBase := scheme + "://" + host + prefix
 
 			req.Header.Set("X-MCPB-Resource", m.cfg.Resource)
 			req.Header.Set("X-MCPB-Public-Base", publicBase)

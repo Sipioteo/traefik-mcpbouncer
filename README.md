@@ -50,6 +50,7 @@ labels:
 | `audience` | no | Override for JWT `aud` claim. Default: same as `resource`. |
 | `jwksCacheTTLSeconds` | no | JWKS cache TTL. Default: `300`. |
 | `requiredScopes` | no | Space-separated scopes that the JWT must carry to pass through. |
+| `pathPrefix` | no | Stable base path under the host used to build the public issuer. `""` for one MCP per host, `"/wiki"` for a subpath, `"*"` (default) to auto-derive from the request URL. Set this explicitly to get stable JWT `iss` and discovery URLs regardless of the path the client requested. |
 
 ## Sidecar
 
