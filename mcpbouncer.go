@@ -222,8 +222,11 @@ func (m *MCPBouncer) checkClaims(claims map[string]interface{}, publicBase strin
 	if iss != publicBase {
 		return fmt.Sprintf("iss_mismatch got=%q want=%q", iss, publicBase)
 	}
-	if !audContains(claims["aud"], m.cfg.Audience) {
-		return fmt.Sprintf("aud_mismatch claim=%v want=%q", claims["aud"], m.cfg.Audience)
+	// aud MUST be the resource URI (= publicBase), per RFC 8707 + MCP auth spec.
+	// The 'audience' config label is accepted for back-compat but ignored:
+	// the spec leaves no room for a custom audience string.
+	if !audContains(claims["aud"], publicBase) {
+		return fmt.Sprintf("aud_mismatch claim=%v want=%q", claims["aud"], publicBase)
 	}
 	exp, ok := claimInt64(claims["exp"])
 	if !ok {

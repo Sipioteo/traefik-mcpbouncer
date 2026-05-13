@@ -259,7 +259,7 @@ func TestServeHTTP_ValidJWT_ForwardsToNext(t *testing.T) {
 	now := time.Now().Unix()
 	claims := map[string]interface{}{
 		"iss":   "https://testhost",
-		"aud":   "wiki",
+		"aud":   "https://testhost",
 		"sub":   "user42",
 		"scope": "openid email",
 		"exp":   float64(now + 3600),
@@ -341,7 +341,7 @@ func TestServeHTTP_StripXMCPBHeaders(t *testing.T) {
 	now := time.Now().Unix()
 	claims := map[string]interface{}{
 		"iss":   "https://testhost",
-		"aud":   "wiki",
+		"aud":   "https://testhost",
 		"sub":   "u1",
 		"scope": "openid",
 		"exp":   float64(now + 3600),
