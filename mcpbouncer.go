@@ -91,11 +91,39 @@ func (m *MCPBouncer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// CORS for browser-based MCP clients (Claude.ai etc).
+	// Set headers on every response so the browser can read WWW-Authenticate
+	// during discovery and follow the OAuth flow.
+	setCORS(w, r)
+
+	// Preflight short-circuit: never gate OPTIONS behind auth.
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+
 	if _, _, ok := MatchOAuthSuffix(r.URL.Path); ok {
 		m.proxyToSidecar(w, r)
 		return
 	}
 	m.validateAndForward(w, r)
+}
+
+// setCORS reflects the request Origin (permissive default) and lists the
+// headers MCP browser clients need to read and send.
+// WWW-Authenticate is exposed so the client can follow RFC 9728 discovery.
+func setCORS(w http.ResponseWriter, r *http.Request) {
+	origin := r.Header.Get("Origin")
+	if origin == "" {
+		return
+	}
+	h := w.Header()
+	h.Set("Access-Control-Allow-Origin", origin)
+	h.Add("Vary", "Origin")
+	h.Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS, DELETE")
+	h.Set("Access-Control-Allow-Headers", "Authorization, Content-Type, Accept, Mcp-Session-Id, Last-Event-Id, X-Requested-With")
+	h.Set("Access-Control-Expose-Headers", "WWW-Authenticate, Mcp-Session-Id")
+	h.Set("Access-Control-Max-Age", "600")
 }
 
 func (m *MCPBouncer) publicBase(r *http.Request) string {
