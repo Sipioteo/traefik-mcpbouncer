@@ -201,7 +201,58 @@ func (m *MCPBouncer) validateAndForward(w http.ResponseWriter, r *http.Request) 
 	r.Header.Set("X-Mcp-Sub", sub)
 	r.Header.Set("X-Mcp-Scopes", scope)
 
-	m.next.ServeHTTP(w, r)
+	// Wrap the writer so we can inspect what the upstream MCP image returned.
+	// 404/405 here almost always means "the client is calling a path the
+	// backend doesn't serve" (e.g. POST / when the backend listens on /mcp).
+	// Surface a hint so operators don't have to dig through backend logs.
+	rec := &backendStatusRecorder{ResponseWriter: w}
+	m.next.ServeHTTP(rec, r)
+
+	switch rec.status {
+	case http.StatusNotFound:
+		fmt.Fprintf(os.Stderr,
+			"[mcpbouncer] hint: backend returned 404 for %s %s — the MCP client is hitting a path the backend doesn't expose. "+
+				"Common cause: the MCP image listens on /mcp (or /sse) but the connector URL points at the host root. "+
+				"Add the correct path to the connector URL on the client side (e.g. https://%s/mcp).\n",
+			r.Method, r.URL.Path, r.Host)
+	case http.StatusMethodNotAllowed:
+		fmt.Fprintf(os.Stderr,
+			"[mcpbouncer] hint: backend returned 405 for %s %s — the MCP client is using the wrong HTTP method on this endpoint. "+
+				"MCP Streamable HTTP expects POST; SSE transport expects GET on /sse and POST on /messages. "+
+				"Check the connector transport setting.\n",
+			r.Method, r.URL.Path)
+	}
+}
+
+// backendStatusRecorder captures the upstream response status for diagnostic logging.
+// Headers and body pass through untouched.
+type backendStatusRecorder struct {
+	http.ResponseWriter
+	status      int
+	wroteHeader bool
+}
+
+func (r *backendStatusRecorder) WriteHeader(code int) {
+	if !r.wroteHeader {
+		r.status = code
+		r.wroteHeader = true
+	}
+	r.ResponseWriter.WriteHeader(code)
+}
+
+func (r *backendStatusRecorder) Write(b []byte) (int, error) {
+	if !r.wroteHeader {
+		r.status = http.StatusOK
+		r.wroteHeader = true
+	}
+	return r.ResponseWriter.Write(b)
+}
+
+// Flush proxies to the underlying writer so SSE / chunked streaming keeps working.
+func (r *backendStatusRecorder) Flush() {
+	if f, ok := r.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
 }
 
 func extractBearer(r *http.Request) (string, bool) {
