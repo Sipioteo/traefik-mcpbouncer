@@ -277,6 +277,56 @@ func TestServeHTTP_ValidJWT_ForwardsToNext(t *testing.T) {
 	}
 }
 
+func TestServeHTTP_ValidJWT_AudArray_ForwardsToNext(t *testing.T) {
+	pub, priv, _ := ed25519.GenerateKey(rand.Reader)
+	xBytes := []byte(pub)
+
+	sidecar := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/oauth/jwks.json" {
+			jwks := fmt.Sprintf(`{"keys":[{"kty":"OKP","crv":"Ed25519","kid":"testkey","alg":"EdDSA","x":%q}]}`,
+				base64.RawURLEncoding.EncodeToString(xBytes))
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(jwks)) //nolint
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer sidecar.Close()
+
+	nextCalled := false
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		nextCalled = true
+		w.WriteHeader(http.StatusOK)
+	})
+
+	cfg := buildConfig(sidecar.URL)
+	h, err := New(context.Background(), next, cfg, "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// aud is an array — RFC 7519 §4.1.3 array form.
+	now := time.Now().Unix()
+	claims := map[string]interface{}{
+		"iss":   "https://testhost",
+		"aud":   []string{"https://testhost"},
+		"sub":   "user99",
+		"scope": "openid email",
+		"exp":   float64(now + 3600),
+	}
+	token := makeEdDSAJWT(t, priv, pub, claims)
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Host = "testhost"
+	req.Header.Set("Authorization", "Bearer "+token)
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+
+	if !nextCalled {
+		t.Errorf("next was not called with array aud; status=%d body=%s", rr.Code, rr.Body.String())
+	}
+}
+
 func TestServeHTTP_InvalidJWT_Returns401(t *testing.T) {
 	sidecar := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/oauth/jwks.json" {
